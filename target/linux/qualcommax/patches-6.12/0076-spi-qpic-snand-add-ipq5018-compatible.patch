@@ -1,0 +1,24 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: fl1ck3r <fl1ck3r@users.noreply.github.com>
+Date: Tue, 19 May 2026 00:00:00 +0000
+Subject: spi: qpic-snand: add IPQ5018 compatible string
+
+Add qcom,ipq5018-snand to the driver match table so the QPIC SNAND
+controller is probed directly on IPQ5018 without relying on the
+ipq9574-snand fallback compatible.
+
+Signed-off-by: fl1ck3r <fl1ck3r@users.noreply.github.com>
+---
+--- a/drivers/spi/spi-qpic-snand.c
++++ b/drivers/spi/spi-qpic-snand.c
+@@ -1695,6 +1695,10 @@ static const struct qcom_nandc_props ipq9574_snandc_props = {
+ };
+ 
+ static const struct of_device_id qcom_snandc_of_match[] = {
++	{
++		.compatible = "qcom,ipq5018-snand",
++		.data = &ipq9574_snandc_props,
++	},
+ 	{
+ 		.compatible = "qcom,ipq9574-snand",
+ 		.data = &ipq9574_snandc_props,
