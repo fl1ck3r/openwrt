@@ -1,0 +1,512 @@
+// SPDX-License-Identifier: GPL-2.0-or-later OR MIT
+
+/dts-v1/;
+
+#include "ipq5018.dtsi"
+#include "ipq5018-ess.dtsi"
+
+/*
+ * Include QCN6122 DTSI for the 5GHz radio protection domain definitions.
+ * Physical chip is QCN6102 (confirmed by visual PCB inspection, marking:
+ * "QUALCOM QCN 6102 001 JE437HXZ"). Stock firmware uses QCN6122 paths
+ * throughout (firmware dirs, ini files) suggesting the firmware blob is
+ * shared/compatible between QCN6102 and QCN6122. DTSI retained accordingly.
+ */
+#include "ipq5018-qcn6122.dtsi"
+
+#include <dt-bindings/gpio/gpio.h>
+#include <dt-bindings/input/input.h>
+#include <dt-bindings/leds/common.h>
+
+/*
+ * TP-Link EX511 v2 — Board Topology
+ *
+ *  +-----------------------------+        +-----------------------------+
+ *  |          IPQ5018            |        |          RTL8367S           |
+ *  |                             |        |                             |
+ *  |  +---------+                |        |  +-------+                 |
+ *  |  |  2.4GHz |  ath11k        |        |  | PORT0 |----------  WAN  |
+ *  |  |  WiFi   |  c000000.wifi  |        |  +-------+                 |
+ *  |  +---------+                |        |  +-------+                 |
+ *  |                             |        |  | PORT1 |----------  LAN1 |
+ *  |  +------+   +------------+  |        |  +-------+                 |
+ *  |  | dp2  |---| SGMII 2.5G |--+--------+--| PORT6 |                 |
+ *  |  | MAC  |   | 0x39d00000 |  |        |  | CPU   |  +-------+     |
+ *  |  +------+   +------------+  |        |  +-------+  | PORT2 |---  LAN2
+ *  |                             |        |             +-------+     |
+ *  |  MDIO: GPIO 36 (MDC)        |        |             +-------+     |
+ *  |         GPIO 37 (MDIO)      |        |             | PORT3 |---  LAN3
+ *  |  Switch reset: GPIO 33      |        |             +-------+     |
+ *  |                             |        |             +-------+     |
+ *  +-----------------------------+        |             | PORT4 |---  LAN4
+ *                                         |             +-------+     |
+ *  +-----------------------------+        +-----------------------------+
+ *  |          QCN6102            |
+ *  |                             |
+ *  |  +---------+                |
+ *  |  |  5GHz   |  ath11k        |
+ *  |  |  WiFi   |  b00a040.wifi  |
+ *  |  +---------+                |
+ *  |  AHB / PCIe                 |
+ *  +-----------------------------+
+ *
+ *  NAND : 128 MiB SPI NAND via QPIC
+ *  UART : GPIO 20 (RX) / GPIO 21 (TX) @ 115200n8
+ *  USB  : USB 3.0, DWC3/QCOM controller
+ */
+
+/ {
+	model = "TP-Link EX511 v2";
+	compatible = "tplink,ex511-v2", "qcom,ipq5018";
+
+	aliases {
+		serial0 = &blsp1_uart1;
+		ethernet0 = &dp2;
+		label-mac-device = &dp2;
+	};
+
+	chosen {
+		stdout-path = "serial0:115200n8";
+		bootargs = "console=ttyMSM0,115200n8 earlyprintk panic=10";
+	};
+
+	/*
+	 * GPIO sources: reverse engineered from tp_gpio.ko .data section
+	 * strings, extracted from stock NAND squashfs.
+	 * Reset button GPIO 25 additionally confirmed by stock MP03.3 DTB:
+	 * gengeric_gpio { reset { gpio = <0x19>; } } (0x19 = 25).
+	 */
+	keys {
+		compatible = "gpio-keys";
+
+		reset {
+			label = "reset";
+			gpios = <&tlmm 25 GPIO_ACTIVE_LOW>;
+			linux,code = <KEY_RESTART>;
+		};
+
+		wps {
+			label = "wps";
+			gpios = <&tlmm 38 GPIO_ACTIVE_LOW>;
+			linux,code = <KEY_WPS_BUTTON>;
+		};
+
+		/* WiFi button GPIO 31 -- from tp_gpio.ko, active polarity unconfirmed */
+		wifi {
+			label = "wifi";
+			gpios = <&tlmm 31 GPIO_ACTIVE_LOW>;
+			linux,code = <KEY_RFKILL>;
+		};
+	};
+
+	leds {
+		compatible = "gpio-leds";
+
+		power {
+			function = LED_FUNCTION_POWER;
+			color = <LED_COLOR_ID_WHITE>;
+			gpios = <&tlmm 18 GPIO_ACTIVE_HIGH>;
+			default-state = "on";
+		};
+
+		/* Dual internet LEDs -- purpose/colour distinction TBD */
+		internet1 {
+			label = "white:internet1";
+			gpios = <&tlmm 11 GPIO_ACTIVE_HIGH>;
+		};
+
+		internet2 {
+			label = "white:internet2";
+			gpios = <&tlmm 22 GPIO_ACTIVE_HIGH>;
+		};
+
+		lan {
+			function = LED_FUNCTION_LAN;
+			color = <LED_COLOR_ID_WHITE>;
+			gpios = <&tlmm 10 GPIO_ACTIVE_HIGH>;
+		};
+
+		wlan2g {
+			label = "white:wlan2g";
+			gpios = <&tlmm 13 GPIO_ACTIVE_HIGH>;
+			linux,default-trigger = "phy0tpt";
+		};
+
+		wlan5g {
+			label = "white:wlan5g";
+			gpios = <&tlmm 39 GPIO_ACTIVE_HIGH>;
+			linux,default-trigger = "phy1tpt";
+		};
+	};
+};
+
+&sleep_clk {
+	clock-frequency = <32000>;
+};
+
+&xo_board_clk {
+	clock-div = <4>;
+	clock-mult = <1>;
+};
+
+&crypto { status = "okay"; };
+&cryptobam { status = "okay"; };
+&prng { status = "okay"; };
+&qfprom { status = "okay"; };
+&qpic_bam { status = "okay"; };
+
+&tlmm {
+	qpic_pins: qpic-pins {
+		data {
+			pins = "gpio4", "gpio5", "gpio6", "gpio7";
+			function = "qspi_data";
+			drive-strength = <8>;
+			bias-pull-up;
+		};
+		cs {
+			pins = "gpio8";
+			function = "qspi_cs";
+			drive-strength = <8>;
+			bias-pull-up;
+		};
+		clk {
+			pins = "gpio9";
+			function = "qspi_clk";
+			drive-strength = <8>;
+			bias-pull-up;
+		};
+	};
+
+	mdio_pins: mdio-pins {
+		/*
+		 * MDC/MDIO pins confirmed by stock MP03.3 DTB:
+		 * gmac_cfg { ext_mdio_gpio = <0x24 0x25>; }
+		 * 0x24=36 (MDC), 0x25=37 (MDIO).
+		 */
+		mdc {
+			pins = "gpio36";
+			function = "mdc";
+			drive-strength = <8>;
+			bias-pull-up;
+		};
+
+		mdio {
+			pins = "gpio37";
+			function = "mdio";
+			drive-strength = <8>;
+			bias-pull-up;
+		};
+	};
+
+	/*
+	 * UART pinctrl function name "blsp_uart" -- needs kernel verification
+	 * against ipq5018 tlmm driver function enum. Working in practice.
+	 */
+	serial_0_pins: serial0-pins {
+		rx {
+			pins = "gpio20";
+			function = "blsp_uart";
+			bias-pull-up;
+		};
+		tx {
+			pins = "gpio21";
+			function = "blsp_uart";
+			bias-pull-up;
+		};
+	};
+};
+
+&blsp1_uart1 {
+	status = "okay";
+	pinctrl-0 = <&serial_0_pins>;
+	pinctrl-names = "default";
+	clocks = <&gcc GCC_BLSP1_UART1_APPS_CLK>,
+	         <&gcc GCC_BLSP1_AHB_CLK>;
+	clock-names = "core", "iface";
+};
+
+&mdio0 {
+	status = "okay";
+	pinctrl-0 = <&mdio_pins>;
+	pinctrl-names = "default";
+
+	/*
+	 * reset-gpios intentionally omitted. GPIO 33 appeared in earlier
+	 * DTS revisions but has no supporting evidence: not present in
+	 * stock MP03.3 DTB gmac2_cfg, not in tp_gpio.ko, not in any
+	 * init script. RTL8367S reset GPIO for this board is unknown.
+	 */
+
+	/*
+	 * Switch: Realtek RTL8367S
+	 * Confirmed by visual PCB inspection: "RTL 8367S OBC23G1 G047B TAIWAN"
+	 * Connection: SGMII 2.5G to dp2 (SoC MAC)
+	 * Confirmed by stock MP03.3 DTB gmac2_cfg: rtl_switch_enable=1 on
+	 * gmac2 (base 0x39d00000).
+	 * Stock firmware initialises via /proc/rtl8367s/ (proprietary driver),
+	 * SGMII mode confirmed: echo 2 > /proc/rtl8367s/mii_type
+	 * Ports 0-4 confirmed active: rcS writes phy_reg for ports 0-4 only.
+	 *
+	 * Compatible string: "realtek,rtl8365mb" is correct for the whole
+	 * RTL836x family. Do NOT change to "realtek,rtl8367s" -- that string
+	 * does not exist in the kernel. The driver detects RTL8367S at runtime
+	 * via chip_id register 0x1300, matching chip_id=0x6367 (rtl8365mb.c
+	 * lines 526, 537, 549).
+	 *
+	 * MDIO address 0x1e (30): RTL8367S conventional default. Not confirmed
+	 * from stock firmware -- stock uses proc interface, not MDIO enumeration.
+	 * Verify via MDIO bus scan on hardware if possible.
+	 *
+	 * Port mapping: derived from DTS structure and rcS port iteration.
+	 * Physical cable verification recommended.
+	 *
+	 * Status: DSA driver correct and ready. Blocked on dp2 MAC driver
+	 * (qcom,nss-dp has no mainline driver in Linux 6.12). Will work
+	 * automatically once dp2 probes.
+	 */
+	switch@1e {
+		compatible = "realtek,rtl8365mb";
+		reg = <0x1e>;
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		ports {
+			#address-cells = <1>;
+			#size-cells = <0>;
+
+			port@0 {
+				reg = <0>;
+				label = "wan";
+			};
+
+			port@1 {
+				reg = <1>;
+				label = "lan1";
+			};
+
+			port@2 {
+				reg = <2>;
+				label = "lan2";
+			};
+
+			port@3 {
+				reg = <3>;
+				label = "lan3";
+			};
+
+			port@4 {
+				reg = <4>;
+				label = "lan4";
+			};
+
+			port@6 {
+				reg = <6>;
+				ethernet = <&dp2>;
+				phy-mode = "sgmii";
+
+				fixed-link {
+					speed = <2500>;
+					full-duplex;
+				};
+			};
+		};
+	};
+};
+
+/*
+ * dp1: IPQ5018 internal GE PHY -- not used on this board.
+ * This board uses dp2 (SGMII) to the external RTL8367S switch.
+ */
+&dp1 {
+	status = "disabled";
+};
+
+/*
+ * dp2: SoC MAC for SGMII link to RTL8367S CPU port (PORT6).
+ * Base address 0x39d00000, confirmed by stock DTB gmac2_cfg.
+ * compatible = "qcom,nss-dp" (from ipq5018-ess.dtsi).
+ * BLOCKED: no mainline driver for qcom,nss-dp in Linux 6.12.
+ * Out-of-tree qca-nss-dp + qca-ssdk attempted and abandoned --
+ * kernel panic (fal_mib_port_flush_counters, x0=0x2e0) on boot.
+ * Waiting for upstream MAC driver (George Moussalem patch series).
+ */
+&dp2 {
+	status = "okay";
+	phy-mode = "sgmii";
+	label = "cpu";
+};
+
+/*
+ * 2.4GHz radio: IPQ5018 integrated (AHB), ath11k path c000000.wifi.
+ * Board data generated with ath11k-bdencoder from stock bdwlan.bin.
+ * Cal data: ART partition all 0xFF on this unit (ISP-erased).
+ * Firmware falls back to internal defaults -- radio functional.
+ * fw-memory-mode=2 set during debugging; mode=1 may also work.
+ * Status: phy0 appears. Scan broken pending removal of fake cal
+ * file (files/lib/firmware/ath11k/IPQ5018/hw1.0/cal-ahb-c000000.wifi.bin
+ * was bdwlan.bin copy, not real cal data -- must be deleted and rebuilt).
+ */
+&wifi {
+	status = "okay";
+	qcom,rproc = <&q6_wcss_pd1>;
+	qcom,ath11k-calibration-variant = "TP-Link-EX511-v2";
+	qcom,ath11k-fw-memory-mode = <2>;
+	qcom,bdf-addr = <0x4c400000>;
+};
+
+/*
+ * 5GHz radio: Physical chip QCN6102 (confirmed visual: "QUALCOM QCN 6102
+ * 001 JE437HXZ"). Stock firmware treats as QCN6122 throughout.
+ * AHB path b00a040.wifi, protection domain q6_wcss_pd2.
+ *
+ * DISABLED -- target-wide firmware crash at ~59s (watchdog timeout).
+ * Reproduced identically on Yuncore AX830 (same IPQ5018+QCN6122 combo),
+ * confirming this is not EX511-specific. QMI init stalls, firmware never
+ * completes handshake, watchdog fires. Root cause unknown.
+ * Monitor OpenWrt qualcommax mailing list for target-wide fix.
+ *
+ * Full wifi1 config preserved in comments for when fix lands:
+ *
+ * &wifi1 {
+ *     status = "okay";
+ *     qcom,rproc = <&q6_wcss_pd2>;
+ *     qcom,userpd-subsys-name = "q6v5_wcss_userpd2";
+ *     qcom,ath11k-calibration-variant = "TP-Link-EX511-v2";
+ *     qcom,ath11k-fw-memory-mode = <1>;
+ *     qcom,bdf-addr = <0x4d100000>;
+ *     qcom,m3-dump-addr = <0x4df00000>;
+ * };
+ */
+&wifi1 {
+	status = "disabled";
+};
+
+&blsp1_spi1 {
+	status = "disabled";
+};
+
+&watchdog {
+	status = "okay";
+};
+
+&qpic_nand {
+	status = "okay";
+	pinctrl-0 = <&qpic_pins>;
+	pinctrl-names = "default";
+
+	nand@0 {
+		compatible = "spi-nand";
+		reg = <0>;
+		nand-ecc-engine = <&qpic_nand>;
+		nand-bus-width = <8>;
+
+		partitions {
+			compatible = "fixed-partitions";
+			#address-cells = <1>;
+			#size-cells = <1>;
+
+			partition@0 {
+				label = "0:SBL1";
+				reg = <0x0 0x80000>;
+				read-only;
+			};
+
+			partition@80000 {
+				label = "0:MIBIB";
+				reg = <0x80000 0x80000>;
+				read-only;
+			};
+
+			partition@100000 {
+				label = "0:BOOTCONFIG";
+				reg = <0x100000 0x40000>;
+				read-only;
+			};
+
+			partition@140000 {
+				label = "0:BOOTCONFIG1";
+				reg = <0x140000 0x40000>;
+				read-only;
+			};
+
+			partition@180000 {
+				label = "0:QSEE";
+				reg = <0x180000 0x100000>;
+				read-only;
+			};
+
+			partition@280000 {
+				label = "0:DEVCFG";
+				reg = <0x280000 0x40000>;
+				read-only;
+			};
+
+			partition@2c0000 {
+				label = "0:CDT";
+				reg = <0x2c0000 0x40000>;
+				read-only;
+			};
+
+			partition@300000 {
+				label = "0:APPSBLENV";
+				reg = <0x300000 0x80000>;
+			};
+
+			partition@380000 {
+				label = "0:APPSBL";
+				reg = <0x380000 0x140000>;
+				read-only;
+			};
+
+			partition@4c0000 {
+				/*
+				 * ART partition: all 0xFF on this unit.
+				 * Unit is ISP-branded; ART was erased before
+				 * delivery. Stock firmware falls back to
+				 * bdwlan.bin in squashfs for board data.
+				 */
+				label = "0:ART";
+				reg = <0x4c0000 0x100000>;
+				read-only;
+			};
+
+			partition@5c0000 {
+				label = "0:TRAINING";
+				reg = <0x5c0000 0x80000>;
+				read-only;
+			};
+
+			partition@640000 {
+				label = "misc_data_ro";
+				reg = <0x640000 0x600000>;
+				read-only;
+			};
+
+			partition@c40000 {
+				label = "misc_data_rw";
+				reg = <0xc40000 0x600000>;
+			};
+
+			partition@1240000 {
+				label = "rootfs";
+				reg = <0x1240000 0x2460000>;
+			};
+
+			partition@36a0000 {
+				label = "rootfs_1";
+				reg = <0x36a0000 0x2460000>;
+			};
+			partition@5b00000 {
+				label = "misc_data_rwbak";
+				reg = <0x5b00000 0x600000>;
+				read-only;
+			};
+
+			partition@6100000 {
+				label = "misc_data_isp";
+				reg = <0x6100000 0x600000>;
+				read-only;
+			};
+		};
+	};
+};
