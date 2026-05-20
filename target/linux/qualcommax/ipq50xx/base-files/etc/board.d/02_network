@@ -7,6 +7,7 @@ ipq50xx_setup_interfaces()
 {
 	local board="$1"
 	case $board in
+	tplink,ex511-v2|\
 	elecom,wrc-x3000gs2|\
 	iodata,wn-dax3000gr|\
 	linksys,mr5500|\
