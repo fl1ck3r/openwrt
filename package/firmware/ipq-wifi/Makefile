@@ -16,6 +16,11 @@ include $(INCLUDE_DIR)/package.mk
 define Build/Compile
 endef
 
+define Build/Prepare
+	mkdir -p $(PKG_BUILD_DIR)
+	$(CP) ./files/* $(PKG_BUILD_DIR)/
+endef
+
 # Use ath10k-bdencoder from https://github.com/qca/qca-swiss-army-knife.git
 # to generate the board-* files here.
 #
@@ -119,7 +124,8 @@ ALLWIFIBOARDS:= \
 	zyxel_nbg7815 \
 	zyxel_nwa110ax \
 	zyxel_nwa210ax \
-	zyxel_scr50axe
+	zyxel_scr50axe \
+	tplink_ex511-v2
 
 ALLWIFIPACKAGES:=$(foreach BOARD,$(ALLWIFIBOARDS),ipq-wifi-$(BOARD))
 
@@ -315,5 +321,6 @@ $(eval $(call generate-ipq-wifi-package,zyxel_nbg7815,Zyxel NBG7815))
 $(eval $(call generate-ipq-wifi-package,zyxel_nwa110ax,Zyxel NWA110AX))
 $(eval $(call generate-ipq-wifi-package,zyxel_nwa210ax,Zyxel NWA210AX))
 $(eval $(call generate-ipq-wifi-package,zyxel_scr50axe,Zyxel SCR50AXE))
+$(eval $(call generate-ipq-wifi-package,tplink_ex511-v2,TP-Link EX511 v2))
 
 $(foreach PACKAGE,$(ALLWIFIPACKAGES),$(eval $(call BuildPackage,$(PACKAGE))))
