@@ -250,3 +250,24 @@ define Device/zyxel_scr50axe
 		ipq-wifi-zyxel_scr50axe
 endef
 TARGET_DEVICES += zyxel_scr50axe
+
+define Device/tplink_ex511-v2
+	$(call Device/FitImage)
+	$(call Device/UbiFit)
+	DEVICE_VENDOR := TP-Link
+	DEVICE_MODEL := EX511 v2
+	DEVICE_DTS := ipq5018-tplink-ex511-v2
+	DEVICE_DTS_CONFIG := config@mp03.3
+	SOC := ipq5018
+	BLOCKSIZE := 128k
+	PAGESIZE := 2048
+	KERNEL_IN_UBI := 1
+	IMAGES += factory.ubi
+	IMAGE/factory.ubi := append-ubi
+	IMAGE/sysupgrade.bin := sysupgrade-tar | append-metadata
+	DEVICE_PACKAGES := ath11k-firmware-ipq5018-qcn6122 \
+		kmod-dsa-realtek \
+		kmod-dsa-rtl8365mb \
+		ipq-wifi-tplink_ex511-v2
+endef
+TARGET_DEVICES += tplink_ex511-v2
