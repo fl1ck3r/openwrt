@@ -16,6 +16,9 @@ DEFAULT_PACKAGES += \
 	kmod-leds-gpio kmod-gpio-button-hotplug \
 	kmod-qca-nss-dp kmod-ath11k-ahb \
 	wpad-basic-mbedtls uboot-envtools \
-	e2fsprogs kmod-fs-ext4 losetup
+	e2fsprogs kmod-fs-ext4 losetup \
+	kmod-dsa-realtek \
+	kmod-dsa-rtl8365mb \
+	ipq-wifi-tplink_ex511-v2
 
 $(eval $(call BuildTarget))
