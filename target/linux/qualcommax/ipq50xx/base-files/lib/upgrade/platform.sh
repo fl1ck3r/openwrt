@@ -238,6 +238,12 @@ platform_do_upgrade() {
 		remove_oem_ubi_volume wifi_fw
 		nand_do_upgrade "$1"
 		;;
+	tplink,ex511-v2)
+		remove_oem_ubi_volume bt_fw
+		remove_oem_ubi_volume ubi_rootfs
+		remove_oem_ubi_volume kernel
+		nand_do_upgrade "$1"
+		;;
 	*)
 		default_do_upgrade "$1"
 		;;
