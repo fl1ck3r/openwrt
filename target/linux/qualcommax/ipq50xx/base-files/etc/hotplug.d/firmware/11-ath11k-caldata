@@ -16,6 +16,14 @@ case "$FIRMWARE" in
 		ath11k_set_macflag
 		ath11k_remove_regdomain
 		;;
+	tplink,ex511-v2)
+		# ART partition is erased on ISP-branded units (all 0xFF).
+		# Extract cal data from board-2.bin at offset 0x6c (108).
+		# Matches stock firmware behaviour: bdwlan.bin used as cal
+		# data fallback when ART is blank.
+		dd if=/lib/firmware/ath11k/IPQ5018/hw1.0/board-2.bin \
+		   of=/lib/firmware/$FIRMWARE bs=1 skip=108 count=131072 2>/dev/null
+		;;
 	elecom,wrc-x3000gs2|\
 	iodata,wn-dax3000gr|\
 	zyxel,scr50axe)
@@ -67,6 +75,11 @@ case "$FIRMWARE" in
 		ath11k_patch_mac $wlan_mac 0
 		ath11k_remove_regdomain
 		ath11k_set_macflag
+		;;
+	tplink,ex511-v2)
+		caldata_extract "0:ART" 0x26800 0x20000
+		# TODO: patch MAC once source confirmed -- APPSBLENV contains
+		# dummy MACs on ISP-branded units, real MAC source unknown.
 		;;
 	elecom,wrc-x3000gs2|\
 	iodata,wn-dax3000gr|\
